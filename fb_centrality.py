@@ -8,13 +8,24 @@ rank = comm.Get_rank()
 
 
 def fw_parallel(start_row, end_row, matrix):
-    for k in range(len(matrix)):
-        # todo: broadcast implementation
+    n = len(matrix)
 
-            for i in range(start_row, end_row):
-                for j in range(0, len(matrix)):
-                    if(matrix[i][k] != 100000000 and matrix[k][j] != 100000000):
-                        matrix[i][j] = min(matrix[i][j], matrix[i][k] + matrix[k][j])
+    for k in range(n):
+        # todo: broadcast implementation
+        owner = k * size // n
+
+        if rank == owner:
+            row_k = matrix[k].copy()
+        else: 
+            row_k = np.empty(n, dtype=int)
+
+        comm.Bcast(row_k, root=owner)
+
+        for i in range(start_row, end_row):
+            for j in range(n):
+                if matrix[i][j] > matrix[i][k] + row_k[j]:
+                    matrix[i][j] = matrix[i][k] + row_k[j]
+
 
 
 def main():
@@ -29,8 +40,23 @@ def main():
         [INF, INF, 1, 0, 2],
         [1, INF, INF, 4, 0]
     ]
+    dist = np.array(dist, dtype=int)
+    n = len(dist)
 
-    fw_parallel(0, 5, dist)
+    #divide the work among processes
+    rows_per_proc = n // size
+    extra_rows = n % size
+
+    if rank < extra_rows:
+        start_row = rank * (rows_per_proc + 1)
+        end_row = start_row + rows_per_proc + 1
+    else:
+        start_row = rank * rows_per_proc + extra_rows
+        end_row = start_row + rows_per_proc
+
+    fw_parallel(start_row, end_row, dist)
+
+    comm.Barrier()  # Synchronize all processes
 
     # read in facebook dataset
 
@@ -48,8 +74,9 @@ def main():
     # with open("output.txt", "w") as output:
     #     print(adj_matrix, file = output)
 
-    print("done")
-    print(dist)
+    if rank == 0:
+        print("done")
+        print(dist)
 
 main()
 
