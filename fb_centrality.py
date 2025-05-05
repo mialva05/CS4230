@@ -26,7 +26,7 @@ def fw_parallel(start_row, end_row, matrix):
                 if matrix[i][j] > matrix[i][k] + row_k[j]:
                     matrix[i][j] = matrix[i][k] + row_k[j]
 
-
+    return matrix[start_row:end_row]
 
 def main():
     # adj_matrix = np.zeros((4039, 4039), dtype=int)   # facebook dataset has 4039 nodes
@@ -54,6 +54,8 @@ def main():
         start_row = rank * rows_per_proc + extra_rows
         end_row = start_row + rows_per_proc
 
+    end_row = min(end_row, n)  
+
     fw_parallel(start_row, end_row, dist)
 
     comm.Barrier()  # Synchronize all processes
@@ -73,8 +75,12 @@ def main():
 
     # with open("output.txt", "w") as output:
     #     print(adj_matrix, file = output)
+    updated_chunk = fw_parallel(start_row, end_row, dist)
+
+    all_chunks = comm.gather(updated_chunk, root=0)
 
     if rank == 0:
+        dist = np.vstack(all_chunks)
         print("done")
         print(dist)
 
